@@ -10,8 +10,16 @@
     "clean": "rm -rf ./lib",
     "refresh": "rm -rf ./node_modules ./package-lock.json && npm install"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Finance-o-Matic/pubsub.git"
+  },
   "author": "PhelipeRocha (https://pheliperocha.com)",
   "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Finance-o-Matic/pubsub/issues"
+  },
+  "homepage": "https://github.com/Finance-o-Matic/pubsub#readme",
   "dependencies": {
     "amqplib": "^0.6.0"
   },
