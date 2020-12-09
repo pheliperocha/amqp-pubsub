@@ -14,7 +14,8 @@ const consumerDefaultOptions: Required<ConsumerOptions> = {
   serviceName: '',
 }
 
-type IConsumerHandler<T, K extends keyof T> = (params: Pick<T, K>[K]) => any
+export type IParsedConsumeMessage<T = any> = ConsumeMessage & { content: T }
+type IConsumerHandler<T, K extends keyof T> = (params: IParsedConsumeMessage<Pick<T, K>[K]>) => any
 type IConsumerDeclarationType<T> = { [K in keyof T]?: IConsumerHandler<T, K> }
 
 export const createConsumer = <T>(consumerDeclaration: IConsumerDeclarationType<T>, options?: ConsumerOptions) => async (): Promise<void> => {
@@ -52,10 +53,13 @@ const consumerHandlerWrapper = (channel: amqp.Channel, exchangeName: string, que
   const content = JSON.parse(Buffer.from(msg.content).toString())
 
   try {
-    await handler(content)
+    await handler({
+      ...msg,
+      content
+    })
     channel.ack(msg)
   } catch (err) {
-    console.log(msg)
+    console.log(`Message ${msg.fields.deliveryTag} failed to deliver with error`, err)
     if (msg.fields.redelivered || msg.properties.headers['x-delay']) {
       return await publishDelayedQueue(channel, exchangeName, queueName, options, msg)
     }
@@ -68,6 +72,7 @@ const publishDelayedQueue = async (channel: amqp.Channel, exchangeName: string, 
   const delayedExchangeName = `dlx.${exchangeName}`
   await channel.assertExchange(delayedExchangeName, 'x-delayed-message', { durable: true, arguments: { 'x-delayed-type': 'fanout' } })
   await channel.bindQueue(queueName, exchangeName, '')
+  console.log(`Republishing message ${msg.fields.deliveryTag} on ${delayedExchangeName} with delay of ${delayInMillisecond}`)
   channel.publish(delayedExchangeName, '', msg.content, { headers: { 'x-delay': delayInMillisecond }, persistent: true })
   channel.ack(msg)
 }
