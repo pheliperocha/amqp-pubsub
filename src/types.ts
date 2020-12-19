@@ -13,7 +13,12 @@ export type ConsumerOptions = {
   password?: string
   host?: string
   port?: number
-  maxDelay?: number
-  delayStep?: number
-  defaultDelay?: number
+  waitQueueTtl?: number
+  maxRetry?: number
+}
+
+export type QueueArguments = {
+  'x-dead-letter-exchange'?: string,
+  'x-dead-letter-routing-key'?: string,
+  'x-message-ttl'?: number
 }

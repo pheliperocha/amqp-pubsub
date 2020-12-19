@@ -1,15 +1,15 @@
 import * as amqp from 'amqplib'
 import { ConsumeMessage } from 'amqplib'
-import { ConsumerOptions } from './types'
+import { ConsumerOptions, QueueArguments } from './types'
+import { capitalizeWord } from './utils'
 
 const consumerDefaultOptions: Required<ConsumerOptions> = {
   username: 'guest',
   password: 'guest',
   host: 'localhost',
   port: 5672,
-  maxDelay: 15 * 60 * 1000,
-  defaultDelay: 1 * 60 * 1000,
-  delayStep: 3 * 60 * 1000,
+  waitQueueTtl: 1 * 60 * 1000,
+  maxRetry: 10,
   exchangeService: '',
   serviceName: '',
 }
@@ -35,50 +35,77 @@ const consumer = async <T extends string, J>(exchange: T, externalFn: J, options
   const channel = await conn.createChannel()
   try {
     const exchangeName = `${consumerOptions.exchangeService}.${exchange}`
-    await channel.assertExchange(exchangeName, 'fanout', { durable: true })
 
-    const queueName = `${consumerOptions.serviceName}.${exchange}`
-    const queue = await channel.assertQueue(queueName, { durable: true })
-    await channel.bindQueue(queue.queue, exchangeName, '')
+    const queueName = `${consumerOptions.serviceName}.${consumerOptions.exchangeService}${capitalizeWord(exchange)}`
+    await assertAndBindingQueues(channel, queueName, exchangeName, options)
 
-    await channel.consume(queueName, consumerHandlerWrapper(channel, exchangeName, queueName, consumerOptions, externalFn))
+    await channel.consume(queueName, consumerHandlerWrapper(channel, queueName, consumerOptions, externalFn))
   } catch (err) {
-    console.error(err)
+    throw err
   }
 }
 
-const consumerHandlerWrapper = (channel: amqp.Channel, exchangeName: string, queueName: string, options: Required<ConsumerOptions>, handler: any) => async (msg: ConsumeMessage | null) => {
+const assertAndBindingQueues = async (channel: amqp.Channel, queueName: string, exchangeName: string, options?: ConsumerOptions) => {
+  const waitQueueName = `${queueName}.wait`
+  const parkedQueueName = `${queueName}.parked`
+
+  const [mainQueue, waitQueue] = await Promise.all([
+    assertQueue(channel, queueName, {
+      'x-dead-letter-exchange': exchangeName,
+      'x-dead-letter-routing-key': waitQueueName
+    }),
+    assertQueue(channel, waitQueueName, {
+      'x-dead-letter-exchange': exchangeName,
+      'x-dead-letter-routing-key': queueName,
+      'x-message-ttl': (options) ? options.waitQueueTtl : consumerDefaultOptions.waitQueueTtl
+    }),
+    assertQueue(channel, parkedQueueName)
+  ])
+  
+  await Promise.all([
+    channel.bindQueue(mainQueue.queue, exchangeName, ''),
+    channel.bindQueue(mainQueue.queue, exchangeName, queueName),
+    channel.bindQueue(waitQueue.queue, exchangeName, waitQueueName)
+  ])
+}
+
+const assertQueue = (channel: amqp.Channel, queueName: string, queueArguments: QueueArguments = {}) => channel.assertQueue(queueName, {
+  durable: true,
+  arguments: queueArguments
+})
+
+const consumerHandlerWrapper = (channel: amqp.Channel, queueName: string, options: Required<ConsumerOptions>, handler: any) => async (msg: ConsumeMessage | null) => {
   if (!msg) return
 
-  const content = JSON.parse(Buffer.from(msg.content).toString())
-
   try {
+    const content = JSON.parse(Buffer.from(msg.content).toString())
+
     await handler({
       ...msg,
       content
     })
     channel.ack(msg)
   } catch (err) {
-    console.log(`Message ${msg.fields.deliveryTag} failed to deliver with error`, err)
-    if (msg.fields.redelivered || msg.properties.headers['x-delay']) {
-      return await publishDelayedQueue(channel, exchangeName, queueName, options, msg)
-    }
-    return channel.reject(msg, true)
+    console.log(`Message ${msg.properties.messageId} failed to deliver with error`)
+
+    if (!msg.fields.redelivered) return channel.reject(msg, true)
+
+    const numberOfRetry = getNumberOfRetry(msg.properties.headers)
+    if (numberOfRetry < options.maxRetry) return channel.reject(msg, false)
+    
+    return sendMessageToParking(channel, queueName, msg, numberOfRetry)
   }
 }
 
-const publishDelayedQueue = async (channel: amqp.Channel, exchangeName: string, queueName: string, options: Required<ConsumerOptions>, msg: ConsumeMessage) => {
-  const delayInMillisecond = getDelayInMillisecond(msg.properties.headers['x-delay'], options)
-  const delayedExchangeName = `dlx.${exchangeName}`
-  await channel.assertExchange(delayedExchangeName, 'x-delayed-message', { durable: true, arguments: { 'x-delayed-type': 'fanout' } })
-  await channel.bindQueue(queueName, exchangeName, '')
-  console.log(`Republishing message ${msg.fields.deliveryTag} on ${delayedExchangeName} with delay of ${delayInMillisecond}`)
-  channel.publish(delayedExchangeName, '', msg.content, { headers: { 'x-delay': delayInMillisecond }, persistent: true })
-  channel.ack(msg)
+const getNumberOfRetry = (headers: amqp.MessagePropertyHeaders): number => {
+  return headers['x-death'] ? headers['x-death'][0].count : 1
 }
 
-const getDelayInMillisecond = (currentDelay: number | undefined, options: Required<ConsumerOptions>) => {
-  if (!currentDelay) return options?.defaultDelay
-  if (currentDelay <= options.maxDelay) return options.maxDelay
-  return currentDelay + options.delayStep
+const sendMessageToParking = async (channel: amqp.Channel, queueName: string, msg: ConsumeMessage, numberOfRetry: number) => {
+  const parkedQueueName = `${queueName}.parked`
+  console.log(`Sending message ${msg.properties.messageId} from ${queueName} to ${parkedQueueName} after ${numberOfRetry} retries`)
+
+  const content = Buffer.from(JSON.stringify(msg.content))
+  channel.sendToQueue(parkedQueueName, content, { persistent: true, messageId: msg.properties.messageId })
+  channel.ack(msg)
 }
