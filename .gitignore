@@ -38,6 +38,7 @@ build/Release
 dist/
 skaffold-dev.yaml
 skaffold-dev.yml
+lib/
 
 # Dependency directories
 node_modules/
