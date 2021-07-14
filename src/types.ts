@@ -1,4 +1,4 @@
-export type ProducerOptions = {
+export type PublisherOptions = {
   serviceName: string
   username?: string
   password?: string

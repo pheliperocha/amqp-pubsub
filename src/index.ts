@@ -1,2 +1,2 @@
-export * from './producer'
+export * from './publisher'
 export * from './consumer'

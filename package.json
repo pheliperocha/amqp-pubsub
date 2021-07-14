@@ -1,6 +1,6 @@
 {
-  "name": "pubsub",
-  "version": "1.0.0",
+  "name": "amqp-pubsub",
+  "version": "1.1.0",
   "description": "",
   "main": "lib/index.js",
   "private": true,
@@ -9,19 +9,19 @@
     "build": "tsc -p .",
     "local": "npm i -g && ocli",
     "clean": "rm -rf ./lib",
-    "refresh": "rm -rf ./node_modules ./package-lock.json && npm install",
+    "refresh": "rm -rf ./node_modules ./lib ./package-lock.json && npm install",
     "prepare": "npm run build"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Finance-o-Matic/pubsub.git"
+    "url": "git+https://github.com/pheliperocha/amqp-pubsub.git"
   },
   "author": "PhelipeRocha (https://pheliperocha.com)",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Finance-o-Matic/pubsub/issues"
+    "url": "https://github.com/pheliperocha/amqp-pubsub/issues"
   },
-  "homepage": "https://github.com/Finance-o-Matic/pubsub#readme",
+  "homepage": "https://github.com/pheliperocha/amqp-pubsub#readme",
   "dependencies": {
     "amqplib": "^0.6.0",
     "uuid": "^8.3.2"

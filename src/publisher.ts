@@ -1,23 +1,23 @@
 import * as amqp from 'amqplib'
-import { ProducerOptions } from './types'
+import { PublisherOptions } from './types'
 import { v4 as uuidv4 } from 'uuid'
 
-const producerDefaultOptions: Partial<ProducerOptions> = {
+const publisherDefaultOptions: Partial<PublisherOptions> = {
   username: 'guest',
   password: 'guest',
   host: 'localhost',
   port: 5672
 }
 
-export const createProducer = <T>(exchanges: (keyof T)[], options: ProducerOptions) => {
+export const createPublisher = <T>(exchanges: (keyof T)[], options: PublisherOptions) => {
   return {
-    producer: async <J extends keyof T>(exchange: J, params: Pick<T, J>[J]): Promise<void> => {
-      const producerOptions = { ...producerDefaultOptions, ...options }
+    publisher: async <J extends keyof T>(exchange: J, params: Pick<T, J>[J]): Promise<void> => {
+      const publisherOptions = { ...publisherDefaultOptions, ...options }
 
       const { conn, channel } = await getConnectionAndChannel(options)
 
       try {
-        const exchangeName = `${producerOptions.serviceName}.${exchange.toString()}`
+        const exchangeName = `${publisherOptions.serviceName}.${exchange.toString()}`
         await assertExchange(channel, exchangeName)
 
         const content = Buffer.from(JSON.stringify(params))
@@ -54,7 +54,7 @@ export const createProducer = <T>(exchanges: (keyof T)[], options: ProducerOptio
   }
 }
 
-const getConnectionAndChannel = async (options: ProducerOptions) => {
+const getConnectionAndChannel = async (options: PublisherOptions) => {
   const conn = await amqp.connect(`amqp://${options.username}:${options.password}@${options.host}:${options.port}/`)
   const channel = await conn.createChannel()
   return { conn, channel }
