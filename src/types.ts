@@ -6,7 +6,7 @@ export type PublisherOptions = {
   port?: number
 }
 
-export type ConsumerOptions = {
+export type SubscriptionOptions = {
   serviceName: string
   exchangeService: string
   username?: string

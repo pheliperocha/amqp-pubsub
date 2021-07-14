@@ -1,9 +1,9 @@
 import * as amqp from 'amqplib'
 import { ConsumeMessage } from 'amqplib'
-import { ConsumerOptions, QueueArguments } from './types'
+import { SubscriptionOptions, QueueArguments } from './types'
 import { capitalizeWord } from './utils'
 
-const consumerDefaultOptions: Required<ConsumerOptions> = {
+const subscriptionDefaultOptions: Required<SubscriptionOptions> = {
   username: 'guest',
   password: 'guest',
   host: 'localhost',
@@ -15,37 +15,37 @@ const consumerDefaultOptions: Required<ConsumerOptions> = {
 }
 
 export type IParsedConsumeMessage<T = any> = ConsumeMessage & { content: T }
-type IConsumerHandler<T, K extends keyof T> = (params: IParsedConsumeMessage<Pick<T, K>[K]>) => any
-type IConsumerDeclarationType<T> = { [K in keyof T]?: IConsumerHandler<T, K> }
+type ISubscriptionHandler<T, K extends keyof T> = (params: IParsedConsumeMessage<Pick<T, K>[K]>) => any
+type ISubscriptionDeclarationType<T> = { [K in keyof T]?: ISubscriptionHandler<T, K> }
 
-export const createConsumer = <T>(consumerDeclaration: IConsumerDeclarationType<T>, options?: ConsumerOptions) => async (): Promise<void> => {
-  const exchanges = Object.keys(consumerDeclaration) as (keyof T)[]
+export const createSubscription = <T>(subscriptionDeclaration: ISubscriptionDeclarationType<T>, options?: SubscriptionOptions) => async (): Promise<void> => {
+  const exchanges = Object.keys(subscriptionDeclaration) as (keyof T)[]
   const arr = exchanges.map((exchange) => {
-    const handler = consumerDeclaration[exchange]
-    return consumer(exchange.toString(), handler, options)
+    const handler = subscriptionDeclaration[exchange]
+    return subscription(exchange.toString(), handler, options)
   })
 
   await Promise.all(arr)
   return
 }
 
-const consumer = async <T extends string, J>(exchange: T, externalFn: J, options?: ConsumerOptions) => {
-  const consumerOptions: Required<ConsumerOptions> = { ...consumerDefaultOptions, ...options }
-  const conn = await amqp.connect(`amqp://${consumerOptions.username}:${consumerOptions.password}@${consumerOptions.host}:${consumerOptions.port}/`)
+const subscription = async <T extends string, J>(exchange: T, externalFn: J, options?: SubscriptionOptions) => {
+  const subscriptionOptions: Required<SubscriptionOptions> = { ...subscriptionDefaultOptions, ...options }
+  const conn = await amqp.connect(`amqp://${subscriptionOptions.username}:${subscriptionOptions.password}@${subscriptionOptions.host}:${subscriptionOptions.port}/`)
   const channel = await conn.createChannel()
   try {
-    const exchangeName = `${consumerOptions.exchangeService}.${exchange}`
+    const exchangeName = `${subscriptionOptions.exchangeService}.${exchange}`
 
-    const queueName = `${consumerOptions.serviceName}.${consumerOptions.exchangeService}${capitalizeWord(exchange)}`
+    const queueName = `${subscriptionOptions.serviceName}.${subscriptionOptions.exchangeService}${capitalizeWord(exchange)}`
     await assertAndBindingQueues(channel, queueName, exchangeName, options)
 
-    await channel.consume(queueName, consumerHandlerWrapper(channel, queueName, consumerOptions, externalFn))
+    await channel.consume(queueName, subscriptionHandlerWrapper(channel, queueName, subscriptionOptions, externalFn))
   } catch (err) {
     throw err
   }
 }
 
-const assertAndBindingQueues = async (channel: amqp.Channel, queueName: string, exchangeName: string, options?: ConsumerOptions) => {
+const assertAndBindingQueues = async (channel: amqp.Channel, queueName: string, exchangeName: string, options?: SubscriptionOptions) => {
   const waitQueueName = `${queueName}.wait`
   const parkedQueueName = `${queueName}.parked`
 
@@ -57,7 +57,7 @@ const assertAndBindingQueues = async (channel: amqp.Channel, queueName: string, 
     assertQueue(channel, waitQueueName, {
       'x-dead-letter-exchange': exchangeName,
       'x-dead-letter-routing-key': queueName,
-      'x-message-ttl': (options) ? options.waitQueueTtl : consumerDefaultOptions.waitQueueTtl
+      'x-message-ttl': (options) ? options.waitQueueTtl : subscriptionDefaultOptions.waitQueueTtl
     }),
     assertQueue(channel, parkedQueueName)
   ])
@@ -74,7 +74,7 @@ const assertQueue = (channel: amqp.Channel, queueName: string, queueArguments: Q
   arguments: queueArguments
 })
 
-const consumerHandlerWrapper = (channel: amqp.Channel, queueName: string, options: Required<ConsumerOptions>, handler: any) => async (msg: ConsumeMessage | null) => {
+const subscriptionHandlerWrapper = (channel: amqp.Channel, queueName: string, options: Required<SubscriptionOptions>, handler: any) => async (msg: ConsumeMessage | null) => {
   if (!msg) return
 
   try {
