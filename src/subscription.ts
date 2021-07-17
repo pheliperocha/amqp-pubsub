@@ -15,8 +15,8 @@ const subscriptionDefaultOptions: Required<SubscriptionOptions> = {
 }
 
 export type IParsedConsumeMessage<T = any> = ConsumeMessage & { content: T }
-type ISubscriptionHandler<T, K extends keyof T> = (params: IParsedConsumeMessage<Pick<T, K>[K]>) => any
-type ISubscriptionDeclarationType<T> = { [K in keyof T]?: ISubscriptionHandler<T, K> }
+export type ISubscriptionHandler<T, K extends keyof T> = (params: IParsedConsumeMessage<Pick<T, K>[K]>) => any
+export type ISubscriptionDeclarationType<T> = { [K in keyof T]?: ISubscriptionHandler<T, K> }
 
 export const createSubscription = <T>(subscriptionDeclaration: ISubscriptionDeclarationType<T>, options?: SubscriptionOptions) => async (): Promise<void> => {
   const exchanges = Object.keys(subscriptionDeclaration) as (keyof T)[]
