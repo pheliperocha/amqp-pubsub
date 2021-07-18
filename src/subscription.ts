@@ -1,6 +1,6 @@
 import * as amqp from 'amqplib'
 import { ConsumeMessage } from 'amqplib'
-import { SubscriptionOptions, QueueArguments } from './types'
+import { SubscriptionOptions } from './types'
 import { capitalizeWord } from './utils'
 
 const subscriptionDefaultOptions: Required<SubscriptionOptions> = {
@@ -67,6 +67,12 @@ const assertAndBindingQueues = async (channel: amqp.Channel, queueName: string, 
     channel.bindQueue(mainQueue.queue, exchangeName, queueName),
     channel.bindQueue(waitQueue.queue, exchangeName, waitQueueName)
   ])
+}
+
+type QueueArguments = {
+  'x-dead-letter-exchange'?: string,
+  'x-dead-letter-routing-key'?: string,
+  'x-message-ttl'?: number
 }
 
 const assertQueue = (channel: amqp.Channel, queueName: string, queueArguments: QueueArguments = {}) => channel.assertQueue(queueName, {

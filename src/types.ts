@@ -16,9 +16,3 @@ export type SubscriptionOptions = {
   waitQueueTtl?: number
   maxRetry?: number
 }
-
-export type QueueArguments = {
-  'x-dead-letter-exchange'?: string,
-  'x-dead-letter-routing-key'?: string,
-  'x-message-ttl'?: number
-}
